@@ -1,0 +1,138 @@
+#include <LPC21XX.H>
+#include <string.h>
+#define   LCD_D  0xff<<4
+#define RS   1<<2
+#define E    1<<3	
+#define M1  1<<16
+#define M2  1<<17
+char rfid[13];
+char auth_uid[] = "6060067DBFC4";
+void LCD_INIT(void);
+void LCD_CMD(unsigned char cmd);
+void LCD_DATA(unsigned char d);
+void delay_ms(int ms);
+void LCD_STR(unsigned char *s);
+void UART0_Init(void);
+char UART0_RX(void);
+void UART0_TX(unsigned char tx);
+void motor_open(void);
+void motor_stop(void);
+void UART0_STR(unsigned char *s);
+int main()
+{
+ int i;
+
+    LCD_INIT();
+	PINSEL0 =0x05;      
+    IODIR0 |= M1|M2;
+    LCD_CMD(0X80);
+    LCD_STR("V25CE2A3");
+	delay_ms(1000);
+    LCD_CMD(0XC0);
+    LCD_STR("TECH ACCESS PRO");
+	delay_ms(1000);
+	LCD_CMD(0X01);
+	LCD_STR("TAP NOW");         
+
+    UART0_Init();
+
+    while(1)
+    {
+        for(i=0;i<12;i++)
+        {
+            rfid[i] = UART0_RX();  
+        }
+        rfid[12] = '\0';
+		UART0_STR(rfid);				 
+        if(strcmp(rfid, auth_uid) == 0)
+        {
+            motor_open();      
+            delay_ms(3000);
+            motor_stop();     
+        }
+        else
+        {
+            motor_stop();    
+        }
+    }
+}
+
+void UART0_Init(void)
+{
+    U0LCR = 0x83;
+    U0DLL = 97;     
+    U0DLM = 0;
+    U0LCR = 0x03;
+}
+void UART0_TX(unsigned char tx)
+{
+	 U0THR=tx;
+	 while(((U0LSR>>5)&1)==0);
+}
+char UART0_RX(void)
+{
+    while((U0LSR&1)==0);
+    return U0RBR;
+}
+
+void motor_open(void)
+{  
+       IOSET0 = M1;
+	   LCD_CMD(0X01);
+	   LCD_STR("*ACCESS GRANTED*");
+	   delay_ms(3000);
+       IOCLR0 = M2;
+	   LCD_CMD(0X01);
+	   LCD_STR("TAP NOW");
+	  
+}
+
+void motor_stop(void)
+{
+      IOCLR0 = M1|M2;
+	  LCD_CMD(0X01);
+	  LCD_STR("*ACCESS DENIED*");
+	  delay_ms(3000);
+	  LCD_CMD(0X01);
+	  LCD_STR("TAP NOW");
+}
+void UART0_STR(unsigned char*s){
+  	   while(*s){
+	   	  UART0_TX(*s++);
+	   }
+}
+
+void LCD_INIT(void){
+   IODIR0=LCD_D|RS|E;									              
+   LCD_CMD (0X01);
+   LCD_CMD (0X02);
+   LCD_CMD (0X0C);
+   LCD_CMD (0X38);
+}
+void LCD_CMD(unsigned char cmd){
+   IOCLR0=LCD_D;
+   IOSET0=cmd<<4;
+   IOCLR0=RS;
+   IOSET0=E;
+   delay_ms(2);
+   IOCLR0=E;
+}
+void LCD_DATA(unsigned char d){
+   IOCLR0=LCD_D;
+   IOSET0=d<<4;
+   IOSET0=RS;
+   IOSET0=E;
+   delay_ms(2);
+   IOCLR0=E;
+}
+void delay_ms(int ms){
+    T0PR=15000-1;
+	T0TCR=0X01;
+	while(T0TC<ms);
+	T0TCR=0X03;
+	T0TCR=0X00;
+}
+void LCD_STR(unsigned char *s){
+   while(*s)
+   LCD_DATA(*s++);
+}
